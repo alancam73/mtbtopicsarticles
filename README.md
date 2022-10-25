@@ -2,7 +2,7 @@
 
 ## Overview
 This repository contains an AWS Lambda which reads DynamoDB table(s) and pushes new Mountain Biking articles to subscribed users every 24h
-The articles are tailored/selected by the user's "topics" interests ie Dwonhill v Scenic v Jumping etc
+The articles are tailored/selected by the user's "topics" interests ie Downhill v Scenic v Jumping etc
 
 ## Dependent Repositories
 
