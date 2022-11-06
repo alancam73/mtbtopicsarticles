@@ -20,7 +20,6 @@ ddbResource = boto3.resource('dynamodb')
 logsClient = boto3.client('logs')
 
 
-
 # put user & topic details in the DynamoDB table
 def recordArticlesPushed(user, articleId, table, articlesPushed):
     
