@@ -15,8 +15,6 @@ import string
 import random
 import argparse
 
-import googleapiclient.discovery
-
 
 ddbResource = boto3.resource('dynamodb')
 logsClient = boto3.client('logs')
@@ -48,34 +46,8 @@ def recordArticlesPushed(user, articleId, table, articlesPushed):
     data = table.put_item(Item=item)
 
 
-# interface with Youtube API v3 to get the video title and channelName
-def get_video_info(api_key, videoId):
-    
-    api_service_name = "youtube"
-    api_version = "v3"
-    response = None
-    
-    youtube = googleapiclient.discovery.build(
-        api_service_name, api_version, developerKey=api_key)
-
-    request = youtube.videos().list(
-        part="snippet",
-        id=videoId
-    )
-    try:
-        response = request.execute()
-#    print(response)
-    except:
-        print("Request: ", request.methodId, "failed")
-    
-    if response:
-        return response['items'][0]['snippet']
-    else:
-        return None
-        
-
 # send email via SES w/ link to the new article
-def sendSESemail(user, articleId, articleData, sesRegion, sesSender, apiKey):
+def sendSESemail(user, articleId, articleData, sesRegion, sesSender):
     
     SENDER = sesSender              # eg mail@mtbtopics.com
     RECIPIENT = user['emailAddress']
@@ -93,31 +65,14 @@ def sendSESemail(user, articleId, articleData, sesRegion, sesSender, apiKey):
     articleURL = articleData['mtbURL']
     userId = user['userId']
     
-    # get the Youtube ID of the articleURL
-    vidId = articleURL.partition("?v=")[2]
-    
-    # now get the Video Title and Channel from the Youtube API v3
-    vidTitle = "title"
-    vidChannel = "channel"
-    my_api_key = apiKey
-    videoInfo = get_video_info(my_api_key, vidId)
-    if videoInfo:
-        vidTitle = videoInfo['title']
-        vidChannel = videoInfo['channelTitle']
-
-    print("Video title is: ", vidTitle, " Channel title is: ", vidChannel)
-    
     # The HTML body of the email.
     BODY_HTML = f"<html><head></head><body><h1>MTB Topic of the Day!</h1><p><b><i>"
     BODY_HTML += userId
     BODY_HTML += "</i></b> : Here is your daily MTB topic/video based on your preferences: -<br><br><a href='"
     BODY_HTML += articleURL
     BODY_HTML += "'>"
-    BODY_HTML += vidTitle
-    BODY_HTML += "</a><br>"
-    BODY_HTML += "<i>YouTube channel: </i>"
-    BODY_HTML += vidChannel
-    BODY_HTML += "<br><br>"
+    BODY_HTML += articleURL
+    BODY_HTML += "</a><br><br>"
     BODY_HTML += "<img src='https://mtbtopics-assets.s3.us-west-2.amazonaws.com/mtb-header-logo-300x50.jpg' alt='MTB Topic of the Day'>"
     BODY_HTML += "<br><br>Enjoy!</p>"
     BODY_HTML += "<p><small>You can unsubscribe at any time <a href='https://www.articles.mtbtopics.com'>here</a></small></p>"
@@ -201,7 +156,7 @@ def calcArticlesBitMask(articlesTbl, articlesResponse):
         
 
 # match >= 1 bit of bitMask and push to user
-def pushArticle(user, articlesResponse, articlesPushedTbl, articlesPushedResponse, sesRegion, sesSender, apiKey):
+def pushArticle(user, articlesResponse, articlesPushedTbl, articlesPushedResponse, sesRegion, sesSender):
     
     # first get the topics bitMask of the user
     bitMask = int(user['topics'])
@@ -235,7 +190,7 @@ def pushArticle(user, articlesResponse, articlesPushedTbl, articlesPushedRespons
             articleElDict = [d for d in articleData if d['articleId'] == el]
             
             # send a link to the article via SES to the user
-            emailSuccess = sendSESemail(user, el, articleElDict[0], sesRegion, sesSender, apiKey)
+            emailSuccess = sendSESemail(user, el, articleElDict[0], sesRegion, sesSender)
             
             # add it to the mtbTopics-Users-ArticlesPushed table so we dont push it again
             if emailSuccess: 
@@ -252,7 +207,6 @@ def lambda_handler(event, context):
     args = None
     sesRegion = None
     sesSender = None
-    apiKey = None
     
     # allow local Python execution testing as well as Lambda env
     execEnv = str(os.getenv('AWS_EXECUTION_ENV'))
@@ -261,7 +215,6 @@ def lambda_handler(event, context):
         log_group = str(logGroupParam)
         sesRegion = str(os.getenv('sesRegion'))
         sesSender = str(os.getenv('sesSender'))
-        apiKey = str(os.getenv('apiKey'))
     else:
         log_group = '/aws/lambda/mtbtopicsarticles'
         parser = argparse.ArgumentParser()
@@ -269,13 +222,9 @@ def lambda_handler(event, context):
         # Adding positional arguments
         parser.add_argument("sesRegion", help = "AWS Region for SES usage")
         parser.add_argument("sesSender", help = "Email address from our MTB Topics domain")
-        parser.add_argument("apiKey", help = "Youtube API key to get video title and channel")
-        
         args = parser.parse_args()
         sesRegion = args.sesRegion
         sesSender = args.sesSender
-        apiKey = args.apiKey
-        
     print ("SESRegion: ", sesRegion, " SESSender: ", sesSender)
         
 
@@ -297,7 +246,7 @@ def lambda_handler(event, context):
         if user['accountActive'] and 'emailAddress' in keys and int(user['topics']) > 0:
             print (user)
             # now match valid users with >= 1 topic from their bitMask
-            pushArticle(user, articlesResponse, articlesPushedTbl, articlesPushedResponse, sesRegion, sesSender, apiKey)
+            pushArticle(user, articlesResponse, articlesPushedTbl, articlesPushedResponse, sesRegion, sesSender)
             
             
     return None
